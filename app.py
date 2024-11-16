@@ -14,8 +14,8 @@ st.set_page_config(
 )
 
 # Add banner image
-image_path = 'Innovius Capital Cover.jpeg'
-st.image(image_path, use_container_width=True)
+#image_path = 'Innovius Capital Cover.jpeg'
+#st.image(image_path, use_container_width=True)
 
 # Load data and models
 @st.cache_data
