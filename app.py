@@ -5,6 +5,7 @@ from sentence_transformers import SentenceTransformer
 import faiss
 import altair as alt
 import os
+import gdown
 
 # Set page configuration
 st.set_page_config(
@@ -13,15 +14,24 @@ st.set_page_config(
     layout="wide",
 )
 
-# Add banner image
-#image_path = 'Innovius Capital Cover.jpeg'
-#st.image(image_path, use_container_width=True)
+# Add banner image (Optional: ensure the image is accessible or remove this line)
+# image_path = 'Innovius Capital Cover.jpeg'
+# st.image(image_path, use_container_width=True)
 
 # Load data and models
 @st.cache_data
 def load_data():
     # Load your DataFrame
     data_path = 'data_with_embeddings.pkl'
+    if not os.path.exists(data_path):
+        st.write("Downloading data file...")
+        # Google Drive file ID
+        file_id = '1Lw9Ihrf0tz7MnWA-dO_q0fGFyssddTlI'
+        # Construct the download URL
+        url = f'https://drive.google.com/uc?id={file_id}'
+        # Download the file
+        gdown.download(url, data_path, quiet=False)
+    
     if not os.path.exists(data_path):
         st.error(f"Data file not found at {data_path}")
         return None, None, None
