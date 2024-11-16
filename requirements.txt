@@ -1,5 +1,3 @@
-torch
-torchvision
 streamlit
 pandas
 numpy
