@@ -32,7 +32,44 @@ st.set_page_config(
     initial_sidebar_state="collapsed"
 )
 
-# [Previous CSS styles remain the same...]
+# Add custom CSS for enhanced visual appeal
+st.markdown("""
+    <style>
+    /* Modern card styling */
+    .company-card {
+        background-color: #ffffff;
+        border-radius: 10px;
+        padding: 20px;
+        margin: 10px 0;
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        border-left: 5px solid #1f77b4;
+    }
+    
+    /* Category badge styling */
+    .category-badge {
+        background-color: #e3f2fd;
+        color: #1976d2;
+        padding: 5px 10px;
+        border-radius: 15px;
+        font-size: 0.8em;
+        margin-right: 5px;
+    }
+    
+    /* Metric container styling */
+    .metric-container {
+        background-color: #f8f9fa;
+        padding: 15px;
+        border-radius: 8px;
+        margin: 10px 0;
+    }
+    
+    /* Enhanced header styling */
+    .stTitle {
+        color: #1976d2 !important;
+        font-weight: 600 !important;
+    }
+    </style>
+""", unsafe_allow_html=True)
 
 def display_banner():
     """Display the Innovius banner."""
@@ -133,34 +170,64 @@ def get_similar_companies(df, embeddings_normalized, index, company_name, top_n=
         st.error(f"Error finding similar companies: {str(e)}")
         return None, None
 
-def create_similarity_chart(similar_companies):
-    """Create an interactive bar chart for similarity scores."""
+def create_radar_chart(company_data):
+    """Create a radar chart comparing key metrics."""
+    categories = ['Employee Count', 'Similarity Score']
     fig = go.Figure()
-    
-    fig.add_trace(go.Bar(
-        x=similar_companies['Similarity Score'],
-        y=similar_companies['Name'],
-        orientation='h',
-        marker=dict(
-            color='rgb(37, 99, 235)',
-            line=dict(color='rgb(8, 47, 167)', width=1)
-        )
+
+    fig.add_trace(go.Scatterpolar(
+        r=[company_data['Employee Count'], company_data['Similarity Score']],
+        theta=categories,
+        fill='toself',
+        name=company_data['Name']
     ))
-    
+
     fig.update_layout(
-        title="Similarity Scores",
-        xaxis_title="Similarity Score",
-        yaxis=dict(title=None, autorange="reversed"),
-        height=400,
-        margin=dict(l=20, r=20, t=40, b=20),
-        plot_bgcolor='rgba(0,0,0,0)',
-        paper_bgcolor='rgba(0,0,0,0)'
+        polar=dict(
+            radialaxis=dict(
+                visible=True,
+                range=[0, max(company_data['Employee Count'], 1)]
+            )),
+        showlegend=True,
+        title="Company Metrics Comparison"
     )
-    
     return fig
 
+def create_category_distribution(similar_companies):
+    """Create a pie chart showing category distribution."""
+    category_counts = similar_companies['Top Level Category'].value_counts()
+    
+    fig = go.Figure(data=[go.Pie(
+        labels=category_counts.index,
+        values=category_counts.values,
+        hole=.3,
+        marker=dict(colors=px.colors.qualitative.Set3)
+    )])
+    
+    fig.update_layout(
+        title="Category Distribution",
+        height=400,
+        margin=dict(l=20, r=20, t=40, b=20)
+    )
+    return fig
+
+def display_company_details(company):
+    """Display detailed company information in a formatted card."""
+    st.markdown(f"""
+    <div class="company-card">
+        <h3>{company['Name']}</h3>
+        <div class="metric-container">
+            <p><strong>Organization ID:</strong> {company['Organization Id']}</p>
+            <p><strong>Employees:</strong> {company['Employee Count']}</p>
+            {f'<span class="category-badge">{company["Top Level Category"]}</span>' if pd.notna(company["Top Level Category"]) else ''}
+            {f'<span class="category-badge">{company["Secondary Category"]}</span>' if pd.notna(company["Secondary Category"]) else ''}
+        </div>
+        <p>{company['Combined_Description']}</p>
+    </div>
+    """, unsafe_allow_html=True)
+
 def main():
-    """Main application logic."""
+    """Main application logic with enhanced visualizations."""
     display_banner()
     
     if not st.session_state.data_loaded:
@@ -204,38 +271,42 @@ def main():
                 # Display query company
                 query_company = df.iloc[company_index]
                 st.subheader("📌 Query Company")
-                st.markdown(f"""
-                <div class="company-card">
-                    <h3>{query_company['Name']}</h3>
-                    <p><strong>Employees:</strong> {query_company['Employee Count']}</p>
-                    <p>{query_company['Combined_Description']}</p>
-                </div>
-                """, unsafe_allow_html=True)
+                display_company_details(query_company)
                 
-                # Display similar companies
-                st.subheader("🎯 Similar Companies")
-                fig = create_similarity_chart(similar_companies)
-                st.plotly_chart(fig, use_container_width=True)
+                # Create tabs for different visualizations
+                tab1, tab2, tab3 = st.tabs(["Similar Companies", "Category Analysis", "Metrics Comparison"])
                 
-                for _, company in similar_companies.iterrows():
-                    st.markdown(f"""
-                    <div class="company-card">
-                        <h4>{company['Name']}</h4>
-                        <p><strong>Similarity:</strong> {company['Similarity Score']:.2f}</p>
-                        <p><strong>Employees:</strong> {company['Employee Count']}</p>
-                        <p>{company['Combined_Description']}</p>
-                    </div>
-                    """, unsafe_allow_html=True)
+                with tab1:
+                    # Display similarity scores chart
+                    fig_similarity = create_similarity_chart(similar_companies)
+                    st.plotly_chart(fig_similarity, use_container_width=True)
+                    
+                    # Display similar companies with enhanced details
+                    for _, company in similar_companies.iterrows():
+                        display_company_details(company)
+                
+                with tab2:
+                    # Display category distribution
+                    fig_categories = create_category_distribution(similar_companies)
+                    st.plotly_chart(fig_categories, use_container_width=True)
+                
+                with tab3:
+                    # Display radar chart for the first similar company
+                    if not similar_companies.empty:
+                        fig_radar = create_radar_chart(similar_companies.iloc[0])
+                        st.plotly_chart(fig_radar, use_container_width=True)
                 
                 # Export functionality
-                if st.button("📥 Export Results"):
-                    csv = similar_companies.to_csv(index=False)
-                    st.download_button(
-                        label="Download CSV",
-                        data=csv,
-                        file_name=f"similar_companies_{company_name_input}.csv",
-                        mime="text/csv"
-                    )
+                col1, col2 = st.columns([1, 4])
+                with col1:
+                    if st.button("📥 Export Results"):
+                        csv = similar_companies.to_csv(index=False)
+                        st.download_button(
+                            label="Download CSV",
+                            data=csv,
+                            file_name=f"similar_companies_{company_name_input}.csv",
+                            mime="text/csv"
+                        )
                     
     except Exception as e:
         st.error("An error occurred. Please refresh the page.")
