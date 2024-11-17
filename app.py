@@ -170,12 +170,32 @@ def create_similarity_chart(similar_companies):
     
     return fig
 
+def display_banner():
+    """
+    Display the Innovius banner image.
+    Uses local image file with error handling and fallback.
+    """
+    try:
+        # Try to load and display the banner image
+        image = Image.open('Innovius Capital Cover.jpeg')
+        st.image(image, use_container_width=True)
+    except Exception as e:
+        # Fallback text if image fails to load
+        logger.error(f"Banner load error: {e}")
+        st.markdown("""
+            # INNOVIUS
+            ## VENTURE DIFFERENTLY
+        """)
+        
 def main():
     """Main application logic."""
     try:
         # Display header
         st.title("🔍 Company Similarity Finder")
         st.write("Find companies similar to your target using our AI-powered analysis.")
+        
+        # Display banner
+        display_banner()
         
         # Load data if not already loaded
         if not st.session_state.data_loaded:
