@@ -32,6 +32,55 @@ st.set_page_config(
     initial_sidebar_state="collapsed"
 )
 
+# Add this CSS at the beginning of your custom CSS section
+st.markdown("""
+<style>
+    /* Dark theme for main background */
+    .stApp {
+        background-color: #0E1117;
+        color: #FAFAFA;
+    }
+    
+    /* Dark theme for company cards */
+    .company-card {
+        background-color: #1E1E1E;
+        border-radius: 10px;
+        padding: 20px;
+        margin: 10px 0;
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.2);
+        border-left: 5px solid #1f77b4;
+        color: #FAFAFA;
+    }
+    
+    /* Dark theme for metric containers */
+    .metric-container {
+        background-color: #262730;
+        padding: 15px;
+        border-radius: 8px;
+        margin: 10px 0;
+        color: #FAFAFA;
+    }
+    
+    /* Style for input fields and widgets */
+    .stTextInput > div > div > input {
+        background-color: #262730;
+        color: #FAFAFA;
+    }
+    
+    /* Style for selectbox */
+    .stSelectbox > div > div > select {
+        background-color: #262730;
+        color: #FAFAFA;
+    }
+    
+    /* Style for number input */
+    .stNumberInput > div > div > input {
+        background-color: #262730;
+        color: #FAFAFA;
+    }
+</style>
+""", unsafe_allow_html=True)
+
 # Add custom CSS for enhanced visual appeal
 st.markdown("""
     <style>
