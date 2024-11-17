@@ -1,18 +1,18 @@
 [server]
-enableStaticServing = true
-enableCORS = false
 maxUploadSize = 400
+enableCORS = false
+enableXsrfProtection = false
+fileWatcherType = "none"
 
 [browser]
 gatherUsageStats = false
 
-[client]
-toolbarMode = "minimal"
-showErrorDetails = false
+[global]
+disableWatchdogWarning = true
 
 [theme]
-base="dark"
-primaryColor="#2563eb"
-backgroundColor="#0a192f"
-secondaryBackgroundColor="#1e293b"
-textColor="#f8fafc"
+base = "dark"
+primaryColor = "#3b82f6"
+backgroundColor = "#0f172a"
+secondaryBackgroundColor = "#1e293b"
+textColor = "#f8fafc"
