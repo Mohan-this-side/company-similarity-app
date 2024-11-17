@@ -18,11 +18,9 @@ import time
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Initialize session state for loading status and cache control
+# Initialize session state
 if 'data_loaded' not in st.session_state:
     st.session_state.data_loaded = False
-
-# Add cache control to prevent infinite loading
 if 'download_attempted' not in st.session_state:
     st.session_state.download_attempted = False
 
@@ -40,10 +38,10 @@ def display_banner():
     """Display the Innovius banner."""
     try:
         image = Image.open('Innovius Capital Cover.jpeg')
-        st.image(image, use_column_width=True)
+        # Fixed deprecated warning by using use_container_width
+        st.image(image, use_container_width=True)
     except Exception as e:
         logger.error(f"Error loading banner: {str(e)}")
-        # Fallback banner if image fails to load
         st.markdown("""
             <div class="banner-container">
                 <h1 class="banner-text">INNOVIUS</h1>
@@ -51,12 +49,11 @@ def display_banner():
             </div>
         """, unsafe_allow_html=True)
 
-@st.cache_data(show_spinner=True, ttl=3600)  # Cache for 1 hour
+@st.cache_data(show_spinner=True, ttl=3600)
 def download_data():
     """Download data with proper error handling and user feedback."""
     data_path = 'data_with_embeddings.pkl'
     
-    # Check if download was already attempted
     if st.session_state.download_attempted and not os.path.exists(data_path):
         return None
     
@@ -92,7 +89,6 @@ def load_data():
         with st.spinner('Processing company data...'):
             df = pd.read_pickle(data_path)
             
-            # Process embeddings with progress updates
             embeddings = np.array(df['Embeddings'].tolist())
             embeddings_normalized = embeddings / np.linalg.norm(embeddings, axis=1, keepdims=True)
             embeddings_normalized = embeddings_normalized.astype('float32')
@@ -101,7 +97,6 @@ def load_data():
             index = faiss.IndexFlatIP(dimension)
             index.add(embeddings_normalized)
             
-            # Clean up memory
             del embeddings
             gc.collect()
             if torch.cuda.is_available():
@@ -114,6 +109,29 @@ def load_data():
         st.error(f"Error loading data: {str(e)}")
         logger.error(f"Data loading error: {str(e)}")
         return None, None, None
+
+def get_similar_companies(df, embeddings_normalized, index, company_name, top_n=5):
+    """Find similar companies based on embedding similarity."""
+    try:
+        company_index = df[df['Name'].str.lower() == company_name.lower()].index[0]
+        query_vector = embeddings_normalized[company_index].reshape(1, -1)
+        distances, indices = index.search(query_vector, top_n + 1)
+        
+        # Filter out the query company
+        mask = indices[0] != company_index
+        similar_indices = indices[0][mask][:top_n]
+        similar_distances = distances[0][mask][:top_n]
+        
+        similar_companies = df.iloc[similar_indices].copy()
+        similar_companies['Similarity Score'] = similar_distances
+        
+        return similar_companies, company_index
+    except IndexError:
+        st.error(f"Company '{company_name}' not found in database.")
+        return None, None
+    except Exception as e:
+        st.error(f"Error finding similar companies: {str(e)}")
+        return None, None
 
 def create_similarity_chart(similar_companies):
     """Create an interactive bar chart for similarity scores."""
@@ -142,87 +160,74 @@ def create_similarity_chart(similar_companies):
     return fig
 
 def main():
-    """Main application logic with improved error handling and user feedback."""
-    # Display banner
+    """Main application logic."""
     display_banner()
     
-    # Initialize loading state
     if not st.session_state.data_loaded:
         st.info("🚀 Initializing the application...")
     
-    # Load data with timeout handling
     try:
-        with st.spinner('Loading company database...'):
-            df, embeddings_normalized, index = load_data()
-    except Exception as e:
-        st.error("Loading timeout. Please refresh the page.")
-        return
-    
-    if df is None:
-        st.error("Unable to load company database. Please try refreshing the page.")
-        st.stop()
-    
-    # Main app content
-    st.title("🔍 Company Similarity Finder")
-    st.markdown("""
-    Discover companies similar to your target using our AI-powered analysis engine.
-    Simply enter a company name below to explore related companies and understand their relationships.
-    """)
-    
-    # Create two columns for inputs
-    col1, col2 = st.columns([2, 1])
-    
-    with col1:
-        company_name_input = st.text_input(
-            "🔎 Enter a company name:",
-            placeholder="e.g., Microsoft, Apple, Tesla..."
-        )
-    
-    with col2:
-        top_n = st.slider(
-            "Number of similar companies:",
-            min_value=1,
-            max_value=20,
-            value=5
-        )
-    
-    # Process search
-    if company_name_input:
-        with st.spinner('Searching for similar companies...'):
+        df, embeddings_normalized, index = load_data()
+        
+        if df is None:
+            st.error("Unable to load company database. Please refresh the page.")
+            st.stop()
+        
+        st.title("🔍 Company Similarity Finder")
+        st.markdown("""
+        Discover companies similar to your target using our AI-powered analysis engine.
+        Simply enter a company name below to explore related companies and understand their relationships.
+        """)
+        
+        col1, col2 = st.columns([2, 1])
+        
+        with col1:
+            company_name_input = st.text_input(
+                "🔎 Enter a company name:",
+                placeholder="e.g., Microsoft, Apple, Tesla..."
+            )
+        
+        with col2:
+            top_n = st.slider(
+                "Number of similar companies:",
+                min_value=1,
+                max_value=20,
+                value=5
+            )
+        
+        if company_name_input:
             similar_companies, company_index = get_similar_companies(
                 df, embeddings_normalized, index, company_name_input, top_n
             )
             
             if similar_companies is not None:
-                # Display query company details
+                # Display query company
                 query_company = df.iloc[company_index]
                 st.subheader("📌 Query Company")
-                with st.container():
-                    st.markdown(f"""
-                    <div class="company-card">
-                        <h3>{query_company['Name']}</h3>
-                        <p><strong>Employee Count:</strong> {query_company['Employee Count']}</p>
-                        <p>{query_company['Combined_Description']}</p>
-                    </div>
-                    """, unsafe_allow_html=True)
+                st.markdown(f"""
+                <div class="company-card">
+                    <h3>{query_company['Name']}</h3>
+                    <p><strong>Employees:</strong> {query_company['Employee Count']}</p>
+                    <p>{query_company['Combined_Description']}</p>
+                </div>
+                """, unsafe_allow_html=True)
                 
-                # Display similarity visualization
+                # Display similar companies
                 st.subheader("🎯 Similar Companies")
                 fig = create_similarity_chart(similar_companies)
                 st.plotly_chart(fig, use_container_width=True)
                 
-                # Display similar companies details
                 for _, company in similar_companies.iterrows():
                     st.markdown(f"""
                     <div class="company-card">
                         <h4>{company['Name']}</h4>
-                        <p><strong>Similarity Score:</strong> {company['Similarity Score']:.2f}</p>
-                        <p><strong>Employee Count:</strong> {company['Employee Count']}</p>
+                        <p><strong>Similarity:</strong> {company['Similarity Score']:.2f}</p>
+                        <p><strong>Employees:</strong> {company['Employee Count']}</p>
                         <p>{company['Combined_Description']}</p>
                     </div>
                     """, unsafe_allow_html=True)
                 
-                # Add export functionality
+                # Export functionality
                 if st.button("📥 Export Results"):
                     csv = similar_companies.to_csv(index=False)
                     st.download_button(
@@ -231,6 +236,10 @@ def main():
                         file_name=f"similar_companies_{company_name_input}.csv",
                         mime="text/csv"
                     )
+                    
+    except Exception as e:
+        st.error("An error occurred. Please refresh the page.")
+        logger.error(f"Error in main: {str(e)}", exc_info=True)
 
 if __name__ == "__main__":
     try:
