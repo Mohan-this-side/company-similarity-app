@@ -82,43 +82,43 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # Add custom CSS for enhanced visual appeal
-st.markdown("""
-    <style>
-    /* Modern card styling */
-    .company-card {
-        background-color: #ffffff;
-        border-radius: 10px;
-        padding: 20px;
-        margin: 10px 0;
-        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-        border-left: 5px solid #1f77b4;
-    }
+# st.markdown("""
+#     <style>
+#     /* Modern card styling */
+#     .company-card {
+#         background-color: #ffffff;
+#         border-radius: 10px;
+#         padding: 20px;
+#         margin: 10px 0;
+#         box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+#         border-left: 5px solid #1f77b4;
+#     }
     
-    /* Category badge styling */
-    .category-badge {
-        background-color: #e3f2fd;
-        color: #1976d2;
-        padding: 5px 10px;
-        border-radius: 15px;
-        font-size: 0.8em;
-        margin-right: 5px;
-    }
+#     /* Category badge styling */
+#     .category-badge {
+#         background-color: #e3f2fd;
+#         color: #1976d2;
+#         padding: 5px 10px;
+#         border-radius: 15px;
+#         font-size: 0.8em;
+#         margin-right: 5px;
+#     }
     
-    /* Metric container styling */
-    .metric-container {
-        background-color: #f8f9fa;
-        padding: 15px;
-        border-radius: 8px;
-        margin: 10px 0;
-    }
+#     /* Metric container styling */
+#     .metric-container {
+#         background-color: #f8f9fa;
+#         padding: 15px;
+#         border-radius: 8px;
+#         margin: 10px 0;
+#     }
     
-    /* Enhanced header styling */
-    .stTitle {
-        color: #1976d2 !important;
-        font-weight: 600 !important;
-    }
-    </style>
-""", unsafe_allow_html=True)
+#     /* Enhanced header styling */
+#     .stTitle {
+#         color: #1976d2 !important;
+#         font-weight: 600 !important;
+#     }
+#     </style>
+# """, unsafe_allow_html=True)
 
 def display_banner():
     """Display the Innovius banner."""
