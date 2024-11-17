@@ -104,10 +104,17 @@ def clean_description(text):
     if pd.isna(text):
         return ""
     
-    # Remove HTML tags and fix common issues
-    text = re.sub(r'</div>\s*<p>', ' ', text)  # Fix specific </div> <p> issue
-    text = re.sub(r'<[^>]+>', ' ', text)  # Remove all HTML tags
+    # First, remove any malformed or incomplete HTML tags
+    text = re.sub(r'</div>\s*(?!<)', ' ', text)  # Remove orphaned closing div tags
+    text = re.sub(r'<p>\s*(?!</p>)', ' ', text)  # Remove orphaned opening p tags
+    
+    # Remove all complete HTML tag pairs
+    text = re.sub(r'<[^>]*>', '', text)
+    
+    # Clean up any remaining special characters and excessive whitespace
+    text = re.sub(r'&[a-zA-Z]+;', ' ', text)  # Remove HTML entities
     text = re.sub(r'\s+', ' ', text)  # Normalize whitespace
+    
     return text.strip()
 
 def format_website_link(website):
