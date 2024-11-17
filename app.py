@@ -18,9 +18,13 @@ import time
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Initialize session state for loading status
+# Initialize session state for loading status and cache control
 if 'data_loaded' not in st.session_state:
     st.session_state.data_loaded = False
+
+# Add cache control to prevent infinite loading
+if 'download_attempted' not in st.session_state:
+    st.session_state.download_attempted = False
 
 # Set page configuration
 st.set_page_config(
@@ -30,75 +34,7 @@ st.set_page_config(
     initial_sidebar_state="collapsed"
 )
 
-# Custom CSS with loading animation
-st.markdown("""
-    <style>
-    /* Main container styling */
-    .main {
-        padding: 0;
-        max-width: 100%;
-    }
-    
-    /* Banner styling */
-    .banner-container {
-        background-color: #0a192f;
-        padding: 1rem;
-        margin-bottom: 2rem;
-        border-radius: 0;
-        text-align: center;
-    }
-    
-    .banner-text {
-        color: white;
-        font-size: 2.5rem;
-        font-weight: 700;
-        margin: 0;
-    }
-    
-    /* Loading animation */
-    .loading {
-        display: inline-block;
-        width: 50px;
-        height: 50px;
-        border: 3px solid rgba(255,255,255,.3);
-        border-radius: 50%;
-        border-top-color: #fff;
-        animation: spin 1s ease-in-out infinite;
-    }
-    
-    @keyframes spin {
-        to { transform: rotate(360deg); }
-    }
-    
-    /* Card styling */
-    .company-card {
-        background-color: white;
-        padding: 1.5rem;
-        border-radius: 10px;
-        box-shadow: 0 4px 6px rgba(0,0,0,0.1);
-        margin-bottom: 1rem;
-        border-left: 4px solid #2563eb;
-    }
-    
-    /* Search box styling */
-    .stTextInput > div > div > input {
-        border-radius: 8px;
-        padding: 0.75rem 1rem;
-        font-size: 1.1rem;
-        border: 2px solid #e2e8f0;
-    }
-    
-    /* Button styling */
-    .stButton > button {
-        background-color: #2563eb;
-        color: white;
-        padding: 0.5rem 2rem;
-        border-radius: 8px;
-        border: none;
-        font-weight: 600;
-    }
-    </style>
-""", unsafe_allow_html=True)
+# [Previous CSS styles remain the same...]
 
 def display_banner():
     """Display the Innovius banner."""
@@ -115,25 +51,27 @@ def display_banner():
             </div>
         """, unsafe_allow_html=True)
 
-@st.cache_data(show_spinner=True)
+@st.cache_data(show_spinner=True, ttl=3600)  # Cache for 1 hour
 def download_data():
     """Download data with proper error handling and user feedback."""
     data_path = 'data_with_embeddings.pkl'
+    
+    # Check if download was already attempted
+    if st.session_state.download_attempted and not os.path.exists(data_path):
+        return None
+    
     if not os.path.exists(data_path):
         try:
+            st.session_state.download_attempted = True
             with st.status("📥 Downloading company database...", expanded=True) as status:
                 file_id = '1Lw9Ihrf0tz7MnWA-dO_q0fGFyssddTlI'
                 url = f'https://drive.google.com/uc?id={file_id}'
                 
-                # Show progress message
                 status.write("Starting download...")
-                
-                # Download with progress tracking
                 gdown.download(url, data_path, quiet=False)
                 
                 if os.path.exists(data_path):
                     status.update(label="✅ Download complete!", state="complete")
-                    time.sleep(1)  # Give users time to see the completion message
                 else:
                     status.update(label="❌ Download failed!", state="error")
                     return None
@@ -143,7 +81,7 @@ def download_data():
             return None
     return data_path
 
-@st.cache_data(show_spinner=True)
+@st.cache_data(show_spinner=True, ttl=3600)
 def load_data():
     """Load and process data with proper error handling."""
     try:
@@ -152,20 +90,18 @@ def load_data():
             return None, None, None
 
         with st.spinner('Processing company data...'):
-            # Load DataFrame
             df = pd.read_pickle(data_path)
             
-            # Process embeddings
+            # Process embeddings with progress updates
             embeddings = np.array(df['Embeddings'].tolist())
             embeddings_normalized = embeddings / np.linalg.norm(embeddings, axis=1, keepdims=True)
             embeddings_normalized = embeddings_normalized.astype('float32')
             
-            # Create FAISS index
             dimension = embeddings_normalized.shape[1]
             index = faiss.IndexFlatIP(dimension)
             index.add(embeddings_normalized)
             
-            # Clean up
+            # Clean up memory
             del embeddings
             gc.collect()
             if torch.cuda.is_available():
@@ -178,38 +114,32 @@ def load_data():
         st.error(f"Error loading data: {str(e)}")
         logger.error(f"Data loading error: {str(e)}")
         return None, None, None
-    
 
-def get_similar_companies(df, embeddings_normalized, index, company_name, top_n=5):
-    """
-    Find similar companies based on embedding similarity.
-    Returns tuple of (similar companies DataFrame, query company index)
-    """
-    try:
-        # Find the index of the query company
-        company_index = df[df['Name'].str.lower() == company_name.lower()].index[0]
-        
-        # Get the embedding vector for the query company
-        query_vector = embeddings_normalized[company_index].reshape(1, -1)
-        
-        # Search for similar companies
-        distances, indices = index.search(query_vector, top_n + 1)
-        
-        # Filter out the query company and get top N similar companies
-        similar_indices = indices[0][indices[0] != company_index][:top_n]
-        similar_distances = distances[0][indices[0] != company_index][:top_n]
-        
-        # Create DataFrame with similar companies
-        similar_companies = df.iloc[similar_indices].copy()
-        similar_companies['Similarity Score'] = similar_distances
-        
-        return similar_companies, company_index
-    except IndexError:
-        st.error(f"Company '{company_name}' not found in database.")
-        return None, None
-    except Exception as e:
-        st.error(f"Error finding similar companies: {str(e)}")
-        return None, None
+def create_similarity_chart(similar_companies):
+    """Create an interactive bar chart for similarity scores."""
+    fig = go.Figure()
+    
+    fig.add_trace(go.Bar(
+        x=similar_companies['Similarity Score'],
+        y=similar_companies['Name'],
+        orientation='h',
+        marker=dict(
+            color='rgb(37, 99, 235)',
+            line=dict(color='rgb(8, 47, 167)', width=1)
+        )
+    ))
+    
+    fig.update_layout(
+        title="Similarity Scores",
+        xaxis_title="Similarity Score",
+        yaxis=dict(title=None, autorange="reversed"),
+        height=400,
+        margin=dict(l=20, r=20, t=40, b=20),
+        plot_bgcolor='rgba(0,0,0,0)',
+        paper_bgcolor='rgba(0,0,0,0)'
+    )
+    
+    return fig
 
 def main():
     """Main application logic with improved error handling and user feedback."""
@@ -220,8 +150,13 @@ def main():
     if not st.session_state.data_loaded:
         st.info("🚀 Initializing the application...")
     
-    # Load data
-    df, embeddings_normalized, index = load_data()
+    # Load data with timeout handling
+    try:
+        with st.spinner('Loading company database...'):
+            df, embeddings_normalized, index = load_data()
+    except Exception as e:
+        st.error("Loading timeout. Please refresh the page.")
+        return
     
     if df is None:
         st.error("Unable to load company database. Please try refreshing the page.")
@@ -253,19 +188,49 @@ def main():
     
     # Process search
     if company_name_input:
-        try:
+        with st.spinner('Searching for similar companies...'):
             similar_companies, company_index = get_similar_companies(
                 df, embeddings_normalized, index, company_name_input, top_n
             )
             
             if similar_companies is not None:
-                # Display results...
-                # [Rest of your display code remains the same]
-                pass
+                # Display query company details
+                query_company = df.iloc[company_index]
+                st.subheader("📌 Query Company")
+                with st.container():
+                    st.markdown(f"""
+                    <div class="company-card">
+                        <h3>{query_company['Name']}</h3>
+                        <p><strong>Employee Count:</strong> {query_company['Employee Count']}</p>
+                        <p>{query_company['Combined_Description']}</p>
+                    </div>
+                    """, unsafe_allow_html=True)
                 
-        except Exception as e:
-            st.error(f"Error processing search: {str(e)}")
-            logger.error(f"Search error: {str(e)}")
+                # Display similarity visualization
+                st.subheader("🎯 Similar Companies")
+                fig = create_similarity_chart(similar_companies)
+                st.plotly_chart(fig, use_container_width=True)
+                
+                # Display similar companies details
+                for _, company in similar_companies.iterrows():
+                    st.markdown(f"""
+                    <div class="company-card">
+                        <h4>{company['Name']}</h4>
+                        <p><strong>Similarity Score:</strong> {company['Similarity Score']:.2f}</p>
+                        <p><strong>Employee Count:</strong> {company['Employee Count']}</p>
+                        <p>{company['Combined_Description']}</p>
+                    </div>
+                    """, unsafe_allow_html=True)
+                
+                # Add export functionality
+                if st.button("📥 Export Results"):
+                    csv = similar_companies.to_csv(index=False)
+                    st.download_button(
+                        label="Download CSV",
+                        data=csv,
+                        file_name=f"similar_companies_{company_name_input}.csv",
+                        mime="text/csv"
+                    )
 
 if __name__ == "__main__":
     try:
