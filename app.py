@@ -170,6 +170,34 @@ def get_similar_companies(df, embeddings_normalized, index, company_name, top_n=
         st.error(f"Error finding similar companies: {str(e)}")
         return None, None
 
+
+
+def create_similarity_chart(similar_companies):
+    """Create an interactive bar chart for similarity scores."""
+    fig = go.Figure()
+    
+    fig.add_trace(go.Bar(
+        x=similar_companies['Similarity Score'],
+        y=similar_companies['Name'],
+        orientation='h',
+        marker=dict(
+            color='rgb(37, 99, 235)',
+            line=dict(color='rgb(8, 47, 167)', width=1)
+        )
+    ))
+    
+    fig.update_layout(
+        title="Similarity Scores",
+        xaxis_title="Similarity Score",
+        yaxis=dict(title=None, autorange="reversed"),
+        height=400,
+        margin=dict(l=20, r=20, t=40, b=20),
+        plot_bgcolor='rgba(0,0,0,0)',
+        paper_bgcolor='rgba(0,0,0,0)'
+    )
+    
+    return fig
+
 def create_radar_chart(company_data):
     """Create a radar chart comparing key metrics."""
     categories = ['Employee Count', 'Similarity Score']
