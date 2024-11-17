@@ -136,139 +136,8 @@ def display_banner():
         """, unsafe_allow_html=True)
 
 @st.cache_data(show_spinner=True, ttl=3600)
-def clean_description(text):
-    """
-    Clean HTML tags and unnecessary elements from text.
-    
-    Args:
-        text (str): Raw text that may contain HTML tags
-    Returns:
-        str: Cleaned text with HTML tags removed
-    """
-    if pd.isna(text):
-        return ""
-    
-    # Remove common HTML tags and artifacts
-    replacements = {
-        '</div>': '',
-        '<div>': '',
-        '</p>': '',
-        '<p>': '',
-        '\n': ' '
-    }
-    
-    cleaned_text = text
-    for old, new in replacements.items():
-        cleaned_text = cleaned_text.replace(old, new)
-    
-    # Remove multiple spaces
-    cleaned_text = ' '.join(cleaned_text.split())
-    return cleaned_text
-
-def format_website_url(website):
-    """
-    Format website URL to ensure it has proper http/https prefix.
-    
-    Args:
-        website (str): Raw website URL
-    Returns:
-        str: Properly formatted URL with https prefix
-    """
-    if pd.isna(website):
-        return ""
-        
-    # Clean the website string
-    website = str(website).strip().lower()
-    
-    # Add https:// if no protocol specified
-    if not website.startswith(('http://', 'https://')):
-        website = f'https://{website}'
-        
-    return website
-
-@st.cache_data(show_spinner=True, ttl=3600)
-def load_data():
-    """Load and process data with improved error handling and status updates."""
-    try:
-        data_path = download_data()
-        if data_path is None:
-            return None, None, None
-
-        # Use status instead of spinner for better feedback
-        with st.status('Processing company data...', expanded=True) as status:
-            status.write("Loading data file...")
-            df = pd.read_pickle(data_path)
-            
-            # Clean company descriptions
-            status.write("Cleaning company descriptions...")
-            df['Combined_Description'] = df['Combined_Description'].apply(clean_description)
-            
-            # Format website URLs
-            status.write("Processing website URLs...")
-            if 'Website' in df.columns:
-                df['Website'] = df['Website'].fillna('')
-            
-            status.write("Processing embeddings...")
-            embeddings = np.array(df['Embeddings'].tolist())
-            embeddings_normalized = embeddings / np.linalg.norm(embeddings, axis=1, keepdims=True)
-            embeddings_normalized = embeddings_normalized.astype('float32')
-            
-            dimension = embeddings_normalized.shape[1]
-            index = faiss.IndexFlatIP(dimension)
-            index.add(embeddings_normalized)
-            
-            # Clean up memory
-            del embeddings
-            gc.collect()
-            if torch.cuda.is_available():
-                torch.cuda.empty_cache()
-            
-            status.update(label="✅ Data loading complete!", state="complete")
-            st.session_state.data_loaded = True
-            return df, embeddings_normalized, index
-            
-    except Exception as e:
-        st.error(f"Error loading data: {str(e)}")
-        logger.error(f"Data loading error: {str(e)}")
-        return None, None, None
-
-def display_company_details(company):
-    """
-    Display detailed company information in a formatted card with website link.
-    
-    Args:
-        company (pd.Series): Company data including name, description, website etc.
-    """
-    # Format website URL and create HTML link if website exists
-    website_html = ""
-    if pd.notna(company.get('Website')):
-        formatted_url = format_website_url(company['Website'])
-        website_html = f"""
-        <p><strong>Website:</strong> 
-            <a href="{formatted_url}" target="_blank" style="color: #1976d2; text-decoration: underline;">
-                {company['Website']}
-            </a>
-        </p>
-        """
-    
-    # Create the company card with all details
-    st.markdown(f"""
-    <div class="company-card">
-        <h3>{company['Name']}</h3>
-        <div class="metric-container">
-            <p><strong>Organization ID:</strong> {company['Organization Id']}</p>
-            <p><strong>Employees:</strong> {company['Employee Count']}</p>
-            {website_html}
-            {f'<span class="category-badge">{company["Top Level Category"]}</span>' if pd.notna(company["Top Level Category"]) else ''}
-            {f'<span class="category-badge">{company["Secondary Category"]}</span>' if pd.notna(company["Secondary Category"]) else ''}
-        </div>
-        <p>{clean_description(company['Combined_Description'])}</p>
-    </div>
-    """, unsafe_allow_html=True)
-
-@st.cache_data(show_spinner=True, ttl=3600)
 def download_data():
-    """Download data with enhanced error handling and progress feedback."""
+    """Download data with proper error handling and user feedback."""
     data_path = 'data_with_embeddings.pkl'
     
     if st.session_state.download_attempted and not os.path.exists(data_path):
@@ -277,45 +146,55 @@ def download_data():
     if not os.path.exists(data_path):
         try:
             st.session_state.download_attempted = True
-            
-            # Create download status indicator with detailed feedback
             with st.status("📥 Downloading company database...", expanded=True) as status:
-                status.write("Initiating download...")
                 file_id = '1Lw9Ihrf0tz7MnWA-dO_q0fGFyssddTlI'
                 url = f'https://drive.google.com/uc?id={file_id}'
                 
-                status.write("Downloading data file (this may take a few minutes)...")
-                
-                # Set download timeout and implement retry logic
-                start_time = time.time()
-                timeout = 300  # 5 minutes timeout
-                max_retries = 3
-                retry_count = 0
-                
-                while not os.path.exists(data_path) and retry_count < max_retries:
-                    if time.time() - start_time > timeout:
-                        status.update(label="❌ Download timed out!", state="error")
-                        return None
-                        
-                    try:
-                        gdown.download(url, data_path, quiet=False)
-                        break
-                    except Exception as e:
-                        retry_count += 1
-                        status.write(f"Download attempt {retry_count} failed, retrying... ({str(e)})")
-                        time.sleep(5)  # Wait 5 seconds before retrying
+                status.write("Starting download...")
+                gdown.download(url, data_path, quiet=False)
                 
                 if os.path.exists(data_path):
                     status.update(label="✅ Download complete!", state="complete")
                 else:
-                    status.update(label="❌ Download failed after maximum retries!", state="error")
+                    status.update(label="❌ Download failed!", state="error")
                     return None
-                
         except Exception as e:
             st.error(f"Error downloading file: {str(e)}")
             logger.error(f"Download error: {str(e)}")
             return None
     return data_path
+
+@st.cache_data(show_spinner=True, ttl=3600)
+def load_data():
+    """Load and process data with proper error handling."""
+    try:
+        data_path = download_data()
+        if data_path is None:
+            return None, None, None
+
+        with st.spinner('Processing company data...'):
+            df = pd.read_pickle(data_path)
+            
+            embeddings = np.array(df['Embeddings'].tolist())
+            embeddings_normalized = embeddings / np.linalg.norm(embeddings, axis=1, keepdims=True)
+            embeddings_normalized = embeddings_normalized.astype('float32')
+            
+            dimension = embeddings_normalized.shape[1]
+            index = faiss.IndexFlatIP(dimension)
+            index.add(embeddings_normalized)
+            
+            del embeddings
+            gc.collect()
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
+            
+            st.session_state.data_loaded = True
+            return df, embeddings_normalized, index
+            
+    except Exception as e:
+        st.error(f"Error loading data: {str(e)}")
+        logger.error(f"Data loading error: {str(e)}")
+        return None, None, None
 
 def get_similar_companies(df, embeddings_normalized, index, company_name, top_n=5):
     """Find similar companies based on embedding similarity."""
