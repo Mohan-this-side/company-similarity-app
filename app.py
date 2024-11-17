@@ -157,7 +157,7 @@ def display_company_details(company):
         category_html.append(f'<span class="category-badge">{company["Secondary Category"]}</span>')
     
     # Join categories with space if they exist
-    categories_display = ' '.join(category_html) if category_html else ''
+    categories_display = ' '.join(category_html) if category_html else ' '
     
     # Create the card HTML with proper structure
     card_html = f"""
