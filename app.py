@@ -3,16 +3,16 @@ import pandas as pd
 import numpy as np
 from sentence_transformers import SentenceTransformer
 import faiss
-import altair as alt
-import os
-import gdown
-import gc
-import torch
-from PIL import Image
 import plotly.express as px
 import plotly.graph_objects as go
 import logging
 import time
+from PIL import Image
+import os
+import gdown
+import gc
+import torch
+import re
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -32,7 +32,7 @@ st.set_page_config(
     initial_sidebar_state="collapsed"
 )
 
-# Add this CSS at the beginning of your custom CSS section
+# Custom CSS with dark theme
 st.markdown("""
 <style>
     /* Dark theme for main background */
@@ -61,19 +61,30 @@ st.markdown("""
         color: #FAFAFA;
     }
     
-    /* Style for input fields and widgets */
+    /* Style for hyperlinks in company cards */
+    .company-website {
+        color: #4CAF50;
+        text-decoration: none;
+        padding: 5px 10px;
+        border-radius: 5px;
+        transition: background-color 0.3s;
+    }
+    
+    .company-website:hover {
+        background-color: rgba(76, 175, 80, 0.1);
+    }
+    
+    /* Input field styles */
     .stTextInput > div > div > input {
         background-color: #262730;
         color: #FAFAFA;
     }
     
-    /* Style for selectbox */
     .stSelectbox > div > div > select {
         background-color: #262730;
         color: #FAFAFA;
     }
     
-    /* Style for number input */
     .stNumberInput > div > div > input {
         background-color: #262730;
         color: #FAFAFA;
@@ -81,44 +92,68 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# Add custom CSS for enhanced visual appeal
-# st.markdown("""
-#     <style>
-#     /* Modern card styling */
-#     .company-card {
-#         background-color: #ffffff;
-#         border-radius: 10px;
-#         padding: 20px;
-#         margin: 10px 0;
-#         box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-#         border-left: 5px solid #1f77b4;
-#     }
+def clean_description(text):
+    """
+    Clean HTML tags and unwanted elements from company description.
     
-#     /* Category badge styling */
-#     .category-badge {
-#         background-color: #e3f2fd;
-#         color: #1976d2;
-#         padding: 5px 10px;
-#         border-radius: 15px;
-#         font-size: 0.8em;
-#         margin-right: 5px;
-#     }
+    Args:
+        text (str): Raw description text
+    Returns:
+        str: Cleaned description text
+    """
+    if pd.isna(text):
+        return ""
     
-#     /* Metric container styling */
-#     .metric-container {
-#         background-color: #f8f9fa;
-#         padding: 15px;
-#         border-radius: 8px;
-#         margin: 10px 0;
-#     }
+    # Remove HTML tags and fix common issues
+    text = re.sub(r'</div>\s*<p>', ' ', text)  # Fix specific </div> <p> issue
+    text = re.sub(r'<[^>]+>', ' ', text)  # Remove all HTML tags
+    text = re.sub(r'\s+', ' ', text)  # Normalize whitespace
+    return text.strip()
+
+def format_website_link(website):
+    """
+    Format website URL into a proper hyperlink.
     
-#     /* Enhanced header styling */
-#     .stTitle {
-#         color: #1976d2 !important;
-#         font-weight: 600 !important;
-#     }
-#     </style>
-# """, unsafe_allow_html=True)
+    Args:
+        website (str): Website URL
+    Returns:
+        str: Formatted HTML hyperlink or empty string
+    """
+    if pd.isna(website):
+        return ""
+    
+    # Ensure URL has proper format
+    if not website.startswith(('http://', 'https://')):
+        website = 'https://' + website
+    
+    return f'<a href="{website}" target="_blank" class="company-website">🌐 Visit Website</a>'
+
+def display_company_details(company):
+    """
+    Display detailed company information in a formatted card.
+    
+    Args:
+        company (pd.Series): Company information
+    """
+    # Clean the description
+    description = clean_description(company.get('Combined_Description', ''))
+    
+    # Format website link
+    website_link = format_website_link(company.get('Website', ''))
+    
+    st.markdown(f"""
+    <div class="company-card">
+        <h3>{company['Name']}</h3>
+        <div class="metric-container">
+            <p><strong>Organization ID:</strong> {company['Organization Id']}</p>
+            <p><strong>Employees:</strong> {company['Employee Count']}</p>
+            {website_link}
+            {f'<span class="category-badge">{company["Top Level Category"]}</span>' if pd.notna(company["Top Level Category"]) else ''}
+            {f'<span class="category-badge">{company["Secondary Category"]}</span>' if pd.notna(company["Secondary Category"]) else ''}
+        </div>
+        <p>{description}</p>
+    </div>
+    """, unsafe_allow_html=True)
 
 def display_banner():
     """Display the Innovius banner."""
@@ -323,8 +358,8 @@ def main():
         Simply enter a company name below to explore related companies and understand their relationships.
         """)
         
+        # User input section
         col1, col2 = st.columns([2, 1])
-        
         with col1:
             company_name_input = st.text_input(
                 "🔎 Enter a company name:",
@@ -350,25 +385,21 @@ def main():
                 st.subheader("📌 Query Company")
                 display_company_details(query_company)
                 
-                # Create tabs for different visualizations
+                # Create visualization tabs
                 tab1, tab2, tab3 = st.tabs(["Similar Companies", "Category Analysis", "Metrics Comparison"])
                 
                 with tab1:
-                    # Display similarity scores chart
                     fig_similarity = create_similarity_chart(similar_companies)
                     st.plotly_chart(fig_similarity, use_container_width=True)
                     
-                    # Display similar companies with enhanced details
                     for _, company in similar_companies.iterrows():
                         display_company_details(company)
                 
                 with tab2:
-                    # Display category distribution
                     fig_categories = create_category_distribution(similar_companies)
                     st.plotly_chart(fig_categories, use_container_width=True)
                 
                 with tab3:
-                    # Display radar chart for the first similar company
                     if not similar_companies.empty:
                         fig_radar = create_radar_chart(similar_companies.iloc[0])
                         st.plotly_chart(fig_radar, use_container_width=True)
@@ -384,7 +415,7 @@ def main():
                             file_name=f"similar_companies_{company_name_input}.csv",
                             mime="text/csv"
                         )
-                    
+    
     except Exception as e:
         st.error("An error occurred. Please refresh the page.")
         logger.error(f"Error in main: {str(e)}", exc_info=True)
