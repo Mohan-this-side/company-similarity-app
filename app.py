@@ -1,30 +1,31 @@
-import streamlit as st
-import pandas as pd
-import numpy as np
-from sentence_transformers import SentenceTransformer
-import faiss
-import plotly.express as px
-import plotly.graph_objects as go
-import logging
-import time
-from PIL import Image
-import os
-import gdown
-import gc
-import torch
-import re
+# Import required libraries
+import streamlit as st  # For creating web application
+import pandas as pd    # For data manipulation
+import numpy as np     # For numerical operations
+from sentence_transformers import SentenceTransformer  # For text embeddings
+import faiss          # For efficient similarity search
+import plotly.express as px      # For interactive visualizations
+import plotly.graph_objects as go # For custom interactive plots
+import logging        # For application logging
+import time          # For timing operations
+from PIL import Image # For image processing
+import os            # For file operations
+import gdown         # For downloading from Google Drive
+import gc            # For garbage collection
+import torch         # For GPU memory management
+import re            # For regular expressions
 
-# Configure logging
+# Configure logging for debugging and monitoring
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Initialize session state
+# Initialize session state variables to maintain state between reruns
 if 'data_loaded' not in st.session_state:
     st.session_state.data_loaded = False
 if 'download_attempted' not in st.session_state:
     st.session_state.download_attempted = False
 
-# Set page configuration
+# Configure the Streamlit page settings
 st.set_page_config(
     page_title="Innovius - Company Similarity Finder",
     page_icon="🔍",
@@ -32,7 +33,7 @@ st.set_page_config(
     initial_sidebar_state="collapsed"
 )
 
-# Custom CSS with dark theme
+# Custom CSS styling for dark theme and UI components
 st.markdown("""
 <style>
     /* Dark theme for main background */
@@ -97,21 +98,21 @@ def clean_description(text):
     Clean HTML tags and unwanted elements from company description.
     
     Args:
-        text (str): Raw description text
+        text (str): Raw description text containing HTML and special characters
     Returns:
-        str: Cleaned description text
+        str: Cleaned and formatted description text
     """
     if pd.isna(text):
         return ""
     
-    # First, remove any malformed or incomplete HTML tags
+    # Remove malformed or incomplete HTML tags
     text = re.sub(r'</div>\s*(?!<)', ' ', text)  # Remove orphaned closing div tags
     text = re.sub(r'<p>\s*(?!</p>)', ' ', text)  # Remove orphaned opening p tags
     
     # Remove all complete HTML tag pairs
     text = re.sub(r'<[^>]*>', '', text)
     
-    # Clean up any remaining special characters and excessive whitespace
+    # Clean up special characters and normalize whitespace
     text = re.sub(r'&[a-zA-Z]+;', ' ', text)  # Remove HTML entities
     text = re.sub(r'\s+', ' ', text)  # Normalize whitespace
     
@@ -119,17 +120,17 @@ def clean_description(text):
 
 def format_website_link(website):
     """
-    Format website URL into a proper hyperlink.
+    Format website URL into a proper HTML hyperlink.
     
     Args:
-        website (str): Website URL
+        website (str): Raw website URL
     Returns:
-        str: Formatted HTML hyperlink or empty string
+        str: Formatted HTML hyperlink or empty string if URL is invalid
     """
     if pd.isna(website):
         return ""
     
-    # Ensure URL has proper format
+    # Ensure URL has proper format with http/https
     if not website.startswith(('http://', 'https://')):
         website = 'https://' + website
     
@@ -137,29 +138,25 @@ def format_website_link(website):
 
 def display_company_details(company):
     """
-    Display detailed company information in a formatted card with proper handling of missing categories.
+    Display detailed company information in a formatted card.
     
     Args:
-        company (pd.Series): Company information
+        company (pd.Series): Company information including name, description, website, etc.
     """
-    # Clean the description first
     description = clean_description(company.get('Combined_Description', ''))
-    
-    # Format website link
     website = company.get('Website', '')
     website_html = format_website_link(website) if pd.notna(website) else ''
     
-    # Handle categories - only add if they exist
+    # Handle category display
     category_html = []
     if pd.notna(company.get("Top Level Category")):
         category_html.append(f'<span class="category-badge">{company["Top Level Category"]}</span>')
     if pd.notna(company.get("Secondary Category")):
         category_html.append(f'<span class="category-badge">{company["Secondary Category"]}</span>')
     
-    # Join categories with space if they exist
     categories_display = ' '.join(category_html) if category_html else 'Not Provided'
     
-    # Create the card HTML with proper structure
+    # Create and display company card
     card_html = f"""
     <div class="company-card">
         <h3>{company['Name']}</h3>
@@ -178,10 +175,11 @@ def display_company_details(company):
     st.markdown(card_html, unsafe_allow_html=True)
 
 def display_banner():
-    """Display the Innovius banner."""
+    """
+    Display the Innovius banner image or fallback to text header.
+    """
     try:
         image = Image.open('Innovius Capital Cover.jpeg')
-        # Fixed deprecated warning by using use_container_width
         st.image(image, use_container_width=True)
     except Exception as e:
         logger.error(f"Error loading banner: {str(e)}")
@@ -194,7 +192,12 @@ def display_banner():
 
 @st.cache_data(show_spinner=True, ttl=3600)
 def download_data():
-    """Download data with proper error handling and user feedback."""
+    """
+    Download company database from Google Drive with caching.
+    
+    Returns:
+        str: Path to downloaded data file or None if download fails
+    """
     data_path = 'data_with_embeddings.pkl'
     
     if st.session_state.download_attempted and not os.path.exists(data_path):
@@ -223,15 +226,20 @@ def download_data():
 
 @st.cache_data(show_spinner=True, ttl=3600)
 def load_data():
-    """Load and process data with proper error handling."""
+    """
+    Load and process company data, creating FAISS index for similarity search.
+    
+    Returns:
+        tuple: (DataFrame, normalized embeddings, FAISS index) or (None, None, None) if loading fails
+    """
     try:
         data_path = download_data()
         if data_path is None:
             return None, None, None
 
         with st.spinner('Processing company data...'):
+            # Load data and create FAISS index
             df = pd.read_pickle(data_path)
-            
             embeddings = np.array(df['Embeddings'].tolist())
             embeddings_normalized = embeddings / np.linalg.norm(embeddings, axis=1, keepdims=True)
             embeddings_normalized = embeddings_normalized.astype('float32')
@@ -240,6 +248,7 @@ def load_data():
             index = faiss.IndexFlatIP(dimension)
             index.add(embeddings_normalized)
             
+            # Clean up memory
             del embeddings
             gc.collect()
             if torch.cuda.is_available():
@@ -254,7 +263,19 @@ def load_data():
         return None, None, None
 
 def get_similar_companies(df, embeddings_normalized, index, company_name, top_n=5):
-    """Find similar companies based on embedding similarity."""
+    """
+    Find similar companies using FAISS similarity search.
+    
+    Args:
+        df (pd.DataFrame): Company database
+        embeddings_normalized (np.array): Normalized company embeddings
+        index (faiss.Index): FAISS similarity index
+        company_name (str): Name of query company
+        top_n (int): Number of similar companies to return
+    
+    Returns:
+        tuple: (DataFrame of similar companies, index of query company) or (None, None) if search fails
+    """
     try:
         company_index = df[df['Name'].str.lower() == company_name.lower()].index[0]
         query_vector = embeddings_normalized[company_index].reshape(1, -1)
@@ -276,10 +297,16 @@ def get_similar_companies(df, embeddings_normalized, index, company_name, top_n=
         st.error(f"Error finding similar companies: {str(e)}")
         return None, None
 
-
-
 def create_similarity_chart(similar_companies):
-    """Create an interactive bar chart for similarity scores."""
+    """
+    Create horizontal bar chart showing similarity scores.
+    
+    Args:
+        similar_companies (pd.DataFrame): DataFrame containing similar companies and their scores
+    
+    Returns:
+        go.Figure: Plotly figure object for similarity chart
+    """
     fig = go.Figure()
     
     fig.add_trace(go.Bar(
@@ -304,31 +331,16 @@ def create_similarity_chart(similar_companies):
     
     return fig
 
-def create_radar_chart(company_data):
-    """Create a radar chart comparing key metrics."""
-    categories = ['Employee Count', 'Similarity Score']
-    fig = go.Figure()
-
-    fig.add_trace(go.Scatterpolar(
-        r=[company_data['Employee Count'], company_data['Similarity Score']],
-        theta=categories,
-        fill='toself',
-        name=company_data['Name']
-    ))
-
-    fig.update_layout(
-        polar=dict(
-            radialaxis=dict(
-                visible=True,
-                range=[0, max(company_data['Employee Count'], 1)]
-            )),
-        showlegend=True,
-        title="Company Metrics Comparison"
-    )
-    return fig
-
 def create_category_distribution(similar_companies):
-    """Create a pie chart showing category distribution."""
+    """
+    Create pie chart showing distribution of company categories.
+    
+    Args:
+        similar_companies (pd.DataFrame): DataFrame containing similar companies
+    
+    Returns:
+        go.Figure: Plotly figure object for category distribution chart
+    """
     category_counts = similar_companies['Top Level Category'].value_counts()
     
     fig = go.Figure(data=[go.Pie(
@@ -345,21 +357,24 @@ def create_category_distribution(similar_companies):
     )
     return fig
 
-
 def main():
-    """Main application logic with enhanced visualizations."""
+    """
+    Main application logic and UI layout.
+    """
     display_banner()
     
     if not st.session_state.data_loaded:
         st.info("🚀 Initializing the application...")
     
     try:
+        # Load data and initialize FAISS index
         df, embeddings_normalized, index = load_data()
         
         if df is None:
             st.error("Unable to load company database. Please refresh the page.")
             st.stop()
         
+        # Application header and description
         st.title("🔍 Company Similarity Finder")
         st.markdown("""
         Discover companies similar to your target using our AI-powered analysis engine.
@@ -383,18 +398,19 @@ def main():
             )
         
         if company_name_input:
+            # Find and display similar companies
             similar_companies, company_index = get_similar_companies(
                 df, embeddings_normalized, index, company_name_input, top_n
             )
             
             if similar_companies is not None:
-                # Display query company
+                # Display query company details
                 query_company = df.iloc[company_index]
                 st.subheader("📌 Query Company")
                 display_company_details(query_company)
                 
                 # Create visualization tabs
-                tab1, tab2, tab3 = st.tabs(["Similar Companies", "Category Analysis", "Metrics Comparison"])
+                tab1, tab2 = st.tabs(["Similar Companies", "Category Analysis"])
                 
                 with tab1:
                     fig_similarity = create_similarity_chart(similar_companies)
@@ -407,10 +423,6 @@ def main():
                     fig_categories = create_category_distribution(similar_companies)
                     st.plotly_chart(fig_categories, use_container_width=True)
                 
-                with tab3:
-                    if not similar_companies.empty:
-                        fig_radar = create_radar_chart(similar_companies.iloc[0])
-                        st.plotly_chart(fig_radar, use_container_width=True)
                 
                 # Export functionality
                 col1, col2 = st.columns([1, 4])
