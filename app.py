@@ -11,6 +11,15 @@ import torch
 from PIL import Image
 import plotly.express as px
 import plotly.graph_objects as go
+import logging 
+
+# Suppress torch warning
+import warnings
+warnings.filterwarnings('ignore', category=UserWarning)
+
+# Configure logging at the start
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 # ============================================================================
 # PAGE CONFIGURATION AND STYLING
@@ -307,8 +316,8 @@ def main():
 
 if __name__ == "__main__":
     # Configure logging
-    logging.basicConfig(level=logging.INFO)
-    logger = logging.getLogger(__name__)
+    #logging.basicConfig(level=logging.INFO)
+    #logger = logging.getLogger(__name__)
     
     try:
         main()
