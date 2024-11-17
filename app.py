@@ -157,7 +157,7 @@ def display_company_details(company):
         category_html.append(f'<span class="category-badge">{company["Secondary Category"]}</span>')
     
     # Join categories with space if they exist
-    categories_display = ' '.join(category_html) if category_html else ' '
+    categories_display = ' '.join(category_html) if category_html else 'Not Provided'
     
     # Create the card HTML with proper structure
     card_html = f"""
@@ -345,20 +345,6 @@ def create_category_distribution(similar_companies):
     )
     return fig
 
-def display_company_details(company):
-    """Display detailed company information in a formatted card."""
-    st.markdown(f"""
-    <div class="company-card">
-        <h3>{company['Name']}</h3>
-        <div class="metric-container">
-            <p><strong>Organization ID:</strong> {company['Organization Id']}</p>
-            <p><strong>Employees:</strong> {company['Employee Count']}</p>
-            {f'<span class="category-badge">{company["Top Level Category"]}</span>' if pd.notna(company["Top Level Category"]) else ''}
-            {f'<span class="category-badge">{company["Secondary Category"]}</span>' if pd.notna(company["Secondary Category"]) else ''}
-        </div>
-        <p>{company['Combined_Description']}</p>
-    </div>
-    """, unsafe_allow_html=True)
 
 def main():
     """Main application logic with enhanced visualizations."""
