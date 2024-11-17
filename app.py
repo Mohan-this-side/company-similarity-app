@@ -178,6 +178,38 @@ def load_data():
         st.error(f"Error loading data: {str(e)}")
         logger.error(f"Data loading error: {str(e)}")
         return None, None, None
+    
+
+def get_similar_companies(df, embeddings_normalized, index, company_name, top_n=5):
+    """
+    Find similar companies based on embedding similarity.
+    Returns tuple of (similar companies DataFrame, query company index)
+    """
+    try:
+        # Find the index of the query company
+        company_index = df[df['Name'].str.lower() == company_name.lower()].index[0]
+        
+        # Get the embedding vector for the query company
+        query_vector = embeddings_normalized[company_index].reshape(1, -1)
+        
+        # Search for similar companies
+        distances, indices = index.search(query_vector, top_n + 1)
+        
+        # Filter out the query company and get top N similar companies
+        similar_indices = indices[0][indices[0] != company_index][:top_n]
+        similar_distances = distances[0][indices[0] != company_index][:top_n]
+        
+        # Create DataFrame with similar companies
+        similar_companies = df.iloc[similar_indices].copy()
+        similar_companies['Similarity Score'] = similar_distances
+        
+        return similar_companies, company_index
+    except IndexError:
+        st.error(f"Company '{company_name}' not found in database.")
+        return None, None
+    except Exception as e:
+        st.error(f"Error finding similar companies: {str(e)}")
+        return None, None
 
 def main():
     """Main application logic with improved error handling and user feedback."""
