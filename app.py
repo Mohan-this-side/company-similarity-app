@@ -137,30 +137,45 @@ def format_website_link(website):
 
 def display_company_details(company):
     """
-    Display detailed company information in a formatted card.
+    Display detailed company information in a formatted card with proper handling of missing categories.
     
     Args:
         company (pd.Series): Company information
     """
-    # Clean the description
+    # Clean the description first
     description = clean_description(company.get('Combined_Description', ''))
     
     # Format website link
-    website_link = format_website_link(company.get('Website', ''))
+    website = company.get('Website', '')
+    website_html = format_website_link(website) if pd.notna(website) else ''
     
-    st.markdown(f"""
+    # Handle categories - only add if they exist
+    category_html = []
+    if pd.notna(company.get("Top Level Category")):
+        category_html.append(f'<span class="category-badge">{company["Top Level Category"]}</span>')
+    if pd.notna(company.get("Secondary Category")):
+        category_html.append(f'<span class="category-badge">{company["Secondary Category"]}</span>')
+    
+    # Join categories with space if they exist
+    categories_display = ' '.join(category_html) if category_html else ''
+    
+    # Create the card HTML with proper structure
+    card_html = f"""
     <div class="company-card">
         <h3>{company['Name']}</h3>
         <div class="metric-container">
             <p><strong>Organization ID:</strong> {company['Organization Id']}</p>
             <p><strong>Employees:</strong> {company['Employee Count']}</p>
-            {website_link}
-            {f'<span class="category-badge">{company["Top Level Category"]}</span>' if pd.notna(company["Top Level Category"]) else ''}
-            {f'<span class="category-badge">{company["Secondary Category"]}</span>' if pd.notna(company["Secondary Category"]) else ''}
+            {website_html}
+            {categories_display}
         </div>
-        <p>{description}</p>
+        <div class="description-container">
+            <p>{description}</p>
+        </div>
     </div>
-    """, unsafe_allow_html=True)
+    """
+    
+    st.markdown(card_html, unsafe_allow_html=True)
 
 def display_banner():
     """Display the Innovius banner."""
