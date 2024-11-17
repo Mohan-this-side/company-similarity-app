@@ -11,8 +11,8 @@ gatherUsageStats = false
 disableWatchdogWarning = true
 
 [theme]
-base = "dark"
-primaryColor = "#3b82f6"
-backgroundColor = "#0f172a"
-secondaryBackgroundColor = "#1e293b"
-textColor = "#f8fafc"
+primaryColor = "#1f77b4"
+backgroundColor = "#0E1117"
+secondaryBackgroundColor = "#262730"
+textColor = "#FAFAFA"
+font = "sans serif"
