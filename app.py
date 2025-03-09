@@ -207,7 +207,7 @@ def download_data():
         try:
             st.session_state.download_attempted = True
             with st.status("📥 Downloading company database...", expanded=True) as status:
-                file_id = '1Lw9Ihrf0tz7MnWA-dO_q0fGFyssddTlI'
+                file_id = '11Ndz9hnFpNZLNgB25TeyxC4vtZKcg3-C'
                 url = f'https://drive.google.com/uc?id={file_id}'
                 
                 status.write("Starting download...")
